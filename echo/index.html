@@ -70,12 +70,12 @@
 <p class="note">macOS / Linux：<code>shasum -a 256 文件名</code>；Windows PowerShell：<code>Get-FileHash 文件名</code>。</p>
 
 <h2>验证签名 / Verify the signature</h2>
-<p>macOS 版由 Apple Developer ID 证书签名并经 Apple 公证（Notarization）。签名者 Zhixin Wang，Team ID <code>2GHXNHTW6R</code>。Apple 不提供公证徽章，但你可以在自己的 Mac 上验证：</p>
-<p>The macOS build is signed with an Apple Developer ID certificate and notarized by Apple. Signer: Zhixin Wang, Team ID <code>2GHXNHTW6R</code>. Apple issues no badge for notarization, but you can verify it yourself:</p>
+<p>macOS 版由 Apple Developer ID 证书签名并经 Apple 公证（Notarization）。Apple 不提供公证徽章，但你可以在自己的 Mac 上验证：</p>
+<p>The macOS build is signed with an Apple Developer ID certificate and notarized by Apple. Apple issues no badge for notarization, but you can verify it yourself:</p>
 <pre><code>spctl -a -vv -t exec /Applications/Echo.app
 #   → accepted  source=Notarized Developer ID
 codesign -dvv /Applications/Echo.app
-#   → Authority=Developer ID Application: Zhixin Wang (2GHXNHTW6R)</code></pre>
+#   → Authority=Developer ID Application: …</code></pre>
 <p class="note">Android 版由固定的正式密钥签名，证书 SHA-256 指纹以 <code>39:1D:74:43</code> 开头：<code>apksigner verify --print-certs Echo-0.29.6-android.apk</code>。Windows 版暂未签名。<br>The Android build is signed with a fixed release key (certificate SHA-256 starts with <code>39:1D:74:43</code>). The Windows build is not signed yet.</p>
 
 <h2>更多 / More</h2>
