@@ -1,0 +1,26 @@
+# Echo 账号预设清单（seed）。复制为同目录 seed-users.yaml 并填真实值；
+# seed-users.yaml 含明文口令，已被 .gitignore 排除，绝不进 git。本 .example 只放占位符。
+#
+# 后端启动时（SEED_USERS_FILE 指向本文件）或手动执行
+#   docker compose run --rm backend seed --file /etc/echo/seed-users.yaml
+# 都会按以下规则**幂等**应用，可反复执行：
+#   - 整份先校验再写库：任一条出错（空 email / 非法 email / 空 password / password 超 72 字节 /
+#     空 display_name / display_name 超 64 字 / role 非 user|admin / 未知字段 / 同文件邮箱重复〔不分大小写〕）
+#     → 整份拒绝、零写入，报错指明第几条（user #N）哪个字段。
+#   - 邮箱不存在 → 创建（口令 bcrypt 存储；管理后台可见口令，与后台批量建号一致）。
+#   - 邮箱已存在 → 跳过：**不覆盖口令、不改 display_name**（改口令请走管理后台）。
+#       但本清单标 role: admin 而库里不是 admin → 提升为 admin；
+#       库里是 admin 而本清单标 user（或省略 role）→ **不降级**，仅在日志提示。
+#   - 已停用（软删除）的账号 → 跳过，不复活。
+#   - 邮箱按原样比对（仅去首尾空格，区分大小写，与登录一致）。
+# 追加账号：在 users 下加一条，然后 `docker compose up -d`（重建 backend 时自动 seed）
+# 或直接执行上面的 `docker compose run --rm backend seed ...`。删掉清单里的条目不会删号。
+
+users:
+  - email: admin@echo.test
+    password: "__CHANGE_ME__"
+    display_name: Admin
+    role: admin        # 可省略，默认 user；只接受 user | admin
+  - email: host@echo.test
+    password: "__CHANGE_ME__"
+    display_name: Host

@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Self-hosting · Echo</title>
+<link rel="stylesheet" href="../../assets/site.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="../../echo/">Echo</a>
+  <nav>
+    <a href="../../echo/">下载 / Download</a>
+    <a href="../../echo/selfhost/">自托管 / Self-host</a>
+    <a href="../../echo/support/">支持 / Support</a>
+    <a href="../../echo/privacy/">隐私 / Privacy</a>
+  </nav>
+</header>
+<main class="doc">
+<div class="card" style="margin-bottom:22px"><h3>下载部署包 / Download the kit</h3>
+<p>compose、配置模板、账号清单模板、内核参数文件与本指南 / compose file, config templates, account manifest template, sysctl file and this guide.</p>
+<a class="btn" href="echo-selfhost-kit.zip">echo-selfhost-kit.zip</a>
+<p class="note">单个文件 / individual files: <a href="kit/docker-compose.yml">docker-compose.yml</a> · <a href="kit/.env.example">.env.example</a> · <a href="kit/livekit.yaml.example">livekit.yaml.example</a> · <a href="kit/seed-users.example.yaml">seed-users.example.yaml</a> · <a href="kit/99-echo-livekit.conf">99-echo-livekit.conf</a> · <a href="kit/README.md">README.md</a><br>后端镜像 / backend image: <code>ghcr.io/loststarjustin/echo-backend:&lt;version&gt;</code></p></div><h1>Echo 自托管服务器搭建指南 / Echo Self-Hosted Server Guide</h1>
+<p>Echo 是一个免费的自托管语音房间客户端。你自己运行服务器，自己创建账号，只有你创建的账号能登录；
+录音只保存在录制者的设备上，服务器不保存任何录音或聊天内容。</p>
+<p>Echo is a free, self-hosted voice-room client. You run the server, you create the accounts, and only
+accounts you created can sign in. Recordings stay on the recording device; the server stores no
+audio and no chat history.</p>
+<hr>
+<h2>中文</h2>
+<h3>你需要什么</h3>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>要求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>一台服务器</td>
+<td>Linux（Ubuntu 22.04 / 24.04 实测），<strong>有公网 IP</strong>，1 核 1 GB 起步</td>
+</tr>
+<tr>
+<td>Docker</td>
+<td>Docker Engine + <code>docker compose</code> 插件（官方安装脚本：<code>curl -fsSL https://get.docker.com | sh</code>）</td>
+</tr>
+<tr>
+<td>防火墙 / 安全组放行</td>
+<td><code>8080/tcp</code>（API）、<code>7880/tcp</code>（信令）、<code>7881/tcp</code>（TCP 回退）、<code>7882/udp</code>（媒体，<strong>必须放行</strong>）</td>
+</tr>
+<tr>
+<td>本目录的文件</td>
+<td><code>docker-compose.yml</code>、<code>.env.example</code>、<code>livekit.yaml.example</code>、<code>seed-users.example.yaml</code>、<code>99-echo-livekit.conf</code></td>
+</tr>
+</tbody>
+</table>
+<p>不需要域名、不需要证书。API 与信令以明文 HTTP / WebSocket 传输，语音媒体始终由 WebRTC（DTLS-SRTP）加密。
+不要用于高敏感场景；需要加密信令时在前面加反向代理与 TLS，并在 <code>.env</code> 打开 <code>BACKEND_SCHEME</code> / <code>LK_SCHEME</code>。</p>
+<h3>首次部署</h3>
+<ol>
+<li>把本目录的文件放到服务器上，例如 <code>/opt/echo</code>，之后的命令都在这个目录执行。</li>
+<li>宿主机内核 UDP 缓冲（LiveKit 需要，容器内改不了）：<pre><code class="language-sh">sudo install -m 644 99-echo-livekit.conf /etc/sysctl.d/99-echo-livekit.conf &amp;&amp; sudo sysctl --system
+sysctl net.core.rmem_max net.core.wmem_max   # 应各为 5000000
+</code></pre>
+</li>
+<li>生成配置：<pre><code class="language-sh">cp .env.example .env
+cp livekit.yaml.example livekit.yaml
+cp seed-users.example.yaml seed-users.yaml
+openssl rand -hex 24   # 跑三次，分别填 POSTGRES_PASSWORD / LIVEKIT_API_KEY / LIVEKIT_API_SECRET
+</code></pre>
+<ul>
+<li><code>.env</code>：填三个随机值、<code>SERVER_PUBLIC_IP</code>（本机公网 IP）、<code>IMAGE_TAG</code>（与你的客户端版本一致，如 <code>0.29.6</code>）。</li>
+<li><code>livekit.yaml</code>：把 <strong>三处</strong> <code>__LIVEKIT_API_KEY__</code> / <code>__LIVEKIT_API_SECRET__</code> 替换成与 <code>.env</code> 完全相同的值（<code>keys:</code> 一行两处，<code>webhook.api_key</code> 一处；漏了 webhook 会丢房间事件）。</li>
+<li><code>seed-users.yaml</code>：写入你要创建的账号（邮箱、密码、显示名；至少一个 <code>role: admin</code>）。</li>
+</ul>
+</li>
+<li>文件权限（后端以非 root 用户 uid 65532 运行）：<pre><code class="language-sh">sudo chown 65532:65532 seed-users.yaml &amp;&amp; sudo chmod 600 seed-users.yaml
+chmod 600 .env livekit.yaml
+</code></pre>
+</li>
+<li>起栈前检查变量是否套对：<pre><code class="language-sh">docker compose config | grep -E &quot;PUBLIC_BASE_URL|LIVEKIT_WS_URL_PUBLIC|image: ghcr&quot;
+# 期望：http://&lt;你的IP&gt;:8080、ws://&lt;你的IP&gt;:7880、echo-backend:&lt;版本号&gt;
+</code></pre>
+</li>
+<li>启动：<pre><code class="language-sh">docker compose up -d
+</code></pre>
+</li>
+<li>验证：<pre><code class="language-sh">curl http://&lt;你的IP&gt;:8080/v1/healthz        # {&quot;status&quot;:&quot;ok&quot;,&quot;db&quot;:&quot;ok&quot;,&quot;livekit&quot;:&quot;ok&quot;}
+docker compose logs backend | grep &quot;seed:&quot;   # 每个账号一行 created，末行 seed: done created=N
+docker compose logs livekit | grep -i &quot;buffer&quot;   # 应无 UDP buffer 告警
+</code></pre>
+</li>
+<li>在 Echo 客户端登录页填服务器地址 <code>http://&lt;你的IP&gt;:8080</code>，用 <code>seed-users.yaml</code> 里的账号登录。</li>
+</ol>
+<h3>账号管理</h3>
+<ul>
+<li><strong>新增账号</strong>：在 <code>seed-users.yaml</code> 追加条目，然后 <code>docker compose up -d --force-recreate backend</code>，或不重启直接执行
+<code>docker compose run --rm backend seed --file /etc/echo/seed-users.yaml</code>。</li>
+<li>清单是幂等的：邮箱不存在才创建；已存在的账号<strong>不会</strong>被改密码、改显示名；标 <code>role: admin</code> 的已有账号会被提升为管理员，但不会降级。</li>
+<li>从清单删掉条目不会删除账号。</li>
+<li>单个账号也可用命令行创建：<code>docker compose run --rm backend create-user --email a@b.c --password '…' --display-name Alice</code>。</li>
+<li><code>seed-users.yaml</code> 含明文密码，只放在服务器上，不要提交到任何仓库。</li>
+</ul>
+<h3>升级</h3>
+<ol>
+<li>客户端升到新版本后，把 <code>.env</code> 的 <code>IMAGE_TAG</code> 改为同一个版本号。</li>
+<li><code>docker compose pull &amp;&amp; docker compose up -d</code>。</li>
+<li>服务器与客户端版本保持一致；不同版本之间不保证协议兼容。</li>
+</ol>
+<p>改了 <code>livekit.yaml</code> 要 <code>docker compose up -d --force-recreate livekit</code>（会断一次正在进行的房间）。</p>
+<h3>拆除</h3>
+<p><code>docker compose down -v</code>（<code>-v</code> 同时删除数据库卷）。</p>
+<h3>常见问题</h3>
+<ul>
+<li><strong><code>host-preflight</code> 报错、livekit 不启动</strong>：第 2 步没做或没生效，按它打印的命令修，再 <code>docker compose up -d --force-recreate livekit</code>。</li>
+<li><strong><code>bind source path does not exist</code></strong>：<code>seed-users.yaml</code> 不在当前目录。</li>
+<li><strong>后端启动报 <code>permission denied</code> 读 seed 文件</strong>：第 4 步 <code>chown 65532:65532</code> 没做。</li>
+<li><strong>能登录、进房后没声音或单向有声</strong>：<code>7882/udp</code> 没放行，或云厂商安全组只放了 TCP。</li>
+<li><strong>中国大陆机房</strong>：Docker Hub / GHCR 直连可能失败，需配置镜像加速；STUN 不可靠时把 <code>livekit.yaml</code> 的 <code>use_external_ip</code> 改为 <code>false</code> 并加 <code>node_ip: &lt;公网 IP&gt;</code>。</li>
+<li><strong>镜像</strong>：<code>ghcr.io/loststarjustin/echo-backend:&lt;版本&gt;</code>，多架构（amd64 / arm64），公开可拉取，无需登录。</li>
+</ul>
+<hr>
+<h2>English</h2>
+<h3>What you need</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Requirement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A server</td>
+<td>Linux (tested on Ubuntu 22.04 / 24.04) with a <strong>public IP</strong>; 1 vCPU / 1 GB is enough to start</td>
+</tr>
+<tr>
+<td>Docker</td>
+<td>Docker Engine + the <code>docker compose</code> plugin (<code>curl -fsSL https://get.docker.com | sh</code>)</td>
+</tr>
+<tr>
+<td>Firewall / security group</td>
+<td>open <code>8080/tcp</code> (API), <code>7880/tcp</code> (signalling), <code>7881/tcp</code> (TCP fallback), <code>7882/udp</code> (media, <strong>required</strong>)</td>
+</tr>
+<tr>
+<td>Files from this folder</td>
+<td><code>docker-compose.yml</code>, <code>.env.example</code>, <code>livekit.yaml.example</code>, <code>seed-users.example.yaml</code>, <code>99-echo-livekit.conf</code></td>
+</tr>
+</tbody>
+</table>
+<p>No domain and no certificate are needed. API and signalling travel as plain HTTP / WebSocket; voice media is
+always encrypted by WebRTC (DTLS-SRTP). Do not use this for highly sensitive use; put a reverse proxy with TLS
+in front and enable <code>BACKEND_SCHEME</code> / <code>LK_SCHEME</code> in <code>.env</code> if you need encrypted signalling.</p>
+<h3>First deployment</h3>
+<ol>
+<li>Copy the files from this folder to the server, e.g. <code>/opt/echo</code>, and run everything below from there.</li>
+<li>Host kernel UDP buffers (required by LiveKit; cannot be changed from inside a container):<pre><code class="language-sh">sudo install -m 644 99-echo-livekit.conf /etc/sysctl.d/99-echo-livekit.conf &amp;&amp; sudo sysctl --system
+sysctl net.core.rmem_max net.core.wmem_max   # both should be 5000000
+</code></pre>
+</li>
+<li>Create the config files:<pre><code class="language-sh">cp .env.example .env
+cp livekit.yaml.example livekit.yaml
+cp seed-users.example.yaml seed-users.yaml
+openssl rand -hex 24   # run three times: POSTGRES_PASSWORD, LIVEKIT_API_KEY, LIVEKIT_API_SECRET
+</code></pre>
+<ul>
+<li><code>.env</code>: the three random values, <code>SERVER_PUBLIC_IP</code> (this machine's public IP) and <code>IMAGE_TAG</code> (same as your client version, e.g. <code>0.29.6</code>).</li>
+<li><code>livekit.yaml</code>: replace <strong>all three</strong> <code>__LIVEKIT_API_KEY__</code> / <code>__LIVEKIT_API_SECRET__</code> placeholders with exactly the values from <code>.env</code> (two on the <code>keys:</code> line, one under <code>webhook.api_key</code>; missing the webhook one silently drops room events).</li>
+<li><code>seed-users.yaml</code>: the accounts you want to create (email, password, display name; at least one <code>role: admin</code>).</li>
+</ul>
+</li>
+<li>File permissions (the backend runs as non-root uid 65532):<pre><code class="language-sh">sudo chown 65532:65532 seed-users.yaml &amp;&amp; sudo chmod 600 seed-users.yaml
+chmod 600 .env livekit.yaml
+</code></pre>
+</li>
+<li>Check the variables resolved correctly before starting:<pre><code class="language-sh">docker compose config | grep -E &quot;PUBLIC_BASE_URL|LIVEKIT_WS_URL_PUBLIC|image: ghcr&quot;
+# expect http://&lt;your IP&gt;:8080, ws://&lt;your IP&gt;:7880 and echo-backend:&lt;version&gt;
+</code></pre>
+</li>
+<li>Start:<pre><code class="language-sh">docker compose up -d
+</code></pre>
+</li>
+<li>Verify:<pre><code class="language-sh">curl http://&lt;your IP&gt;:8080/v1/healthz        # {&quot;status&quot;:&quot;ok&quot;,&quot;db&quot;:&quot;ok&quot;,&quot;livekit&quot;:&quot;ok&quot;}
+docker compose logs backend | grep &quot;seed:&quot;   # one &quot;created&quot; line per account, then seed: done created=N
+docker compose logs livekit | grep -i &quot;buffer&quot;   # no UDP buffer warning expected
+</code></pre>
+</li>
+<li>In the Echo client, enter <code>http://&lt;your IP&gt;:8080</code> as the server address on the login screen and sign in with an account from <code>seed-users.yaml</code>.</li>
+</ol>
+<h3>Managing accounts</h3>
+<ul>
+<li><strong>Add accounts</strong>: append to <code>seed-users.yaml</code>, then <code>docker compose up -d --force-recreate backend</code>, or without a restart:
+<code>docker compose run --rm backend seed --file /etc/echo/seed-users.yaml</code>.</li>
+<li>The manifest is idempotent: an email is created only if it does not exist; existing accounts keep their password and display name; an existing account listed with <code>role: admin</code> is promoted, never demoted.</li>
+<li>Removing an entry from the manifest does not delete the account.</li>
+<li>One-off creation: <code>docker compose run --rm backend create-user --email a@b.c --password '…' --display-name Alice</code>.</li>
+<li><code>seed-users.yaml</code> holds plaintext passwords: keep it on the server only and never commit it.</li>
+</ul>
+<h3>Upgrading</h3>
+<ol>
+<li>After upgrading your clients, set <code>IMAGE_TAG</code> in <code>.env</code> to the same version.</li>
+<li><code>docker compose pull &amp;&amp; docker compose up -d</code>.</li>
+<li>Keep server and clients on the same version; protocol compatibility across versions is not guaranteed.</li>
+</ol>
+<p>After editing <code>livekit.yaml</code>, run <code>docker compose up -d --force-recreate livekit</code> (this interrupts rooms in progress once).</p>
+<h3>Tearing down</h3>
+<p><code>docker compose down -v</code> (<code>-v</code> also deletes the database volume).</p>
+<h3>Troubleshooting</h3>
+<ul>
+<li><strong><code>host-preflight</code> fails and livekit does not start</strong>: step 2 was skipped or did not apply; run the printed fix, then <code>docker compose up -d --force-recreate livekit</code>.</li>
+<li><strong><code>bind source path does not exist</code></strong>: <code>seed-users.yaml</code> is not in the current directory.</li>
+<li><strong>Backend logs <code>permission denied</code> on the seed file</strong>: step 4 (<code>chown 65532:65532</code>) was skipped.</li>
+<li><strong>Sign-in works but no audio / one-way audio in rooms</strong>: <code>7882/udp</code> is blocked, or the cloud security group only allows TCP.</li>
+<li><strong>Hosts in mainland China</strong>: Docker Hub / GHCR may be unreachable without a registry mirror; if STUN is unreliable set <code>use_external_ip: false</code> in <code>livekit.yaml</code> and add <code>node_ip: &lt;public IP&gt;</code>.</li>
+<li><strong>Image</strong>: <code>ghcr.io/loststarjustin/echo-backend:&lt;version&gt;</code>, multi-arch (amd64 / arm64), public, no login required.</li>
+</ul>
+
+</main>
+<footer class="foot">© 2026 Zhixin Wang · Echo is self-hosted software; the developer collects no data.</footer>
+</body>
+</html>

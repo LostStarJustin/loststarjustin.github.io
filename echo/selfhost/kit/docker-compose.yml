@@ -1,0 +1,121 @@
+# Echo 自托管服务器 / Echo self-hosted server
+# 一台有公网 IP 的机器 + Docker 即可；无域名、无证书（明文 HTTP / WS，媒体仍由 WebRTC DTLS-SRTP 加密）。
+# One machine with a public IP and Docker is enough; no domain or certificate needed
+# (plain HTTP / WS signalling; media is still encrypted by WebRTC DTLS-SRTP).
+#
+# 起栈前必备 / before `docker compose up -d`:
+#   1. .env           ← 由 .env.example 复制并填值 / copy from .env.example and fill in
+#   2. livekit.yaml   ← 由 livekit.yaml.example 复制并替换三处占位符 / copy from livekit.yaml.example, replace 3 placeholders
+#   3. seed-users.yaml ← 由 seed-users.example.yaml 复制并填账号 / copy from seed-users.example.yaml and add accounts
+#   4. 宿主机 UDP 缓冲 / host UDP buffers: sudo install -m 644 99-echo-livekit.conf /etc/sysctl.d/ && sudo sysctl --system
+# 安全组放行 / open in firewall: 8080/tcp 7880/tcp 7881/tcp 7882/udp
+name: echo
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: echo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: echo
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U echo -d echo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # 数据库只在 compose 内网可达，不发布端口 / DB is compose-internal only, no published port
+
+  # 宿主机前置检查：LiveKit 媒体走 UDP，内核 socket 缓冲太小会在内核层丢包（卡顿）。
+  # 这是宿主机参数，容器改不了，所以这里只做检查：不达标 → livekit 不启动并打印修法。
+  # Host pre-flight: LiveKit media is UDP; small kernel socket buffers drop packets (choppy audio).
+  # It is a host setting containers cannot change, so this only checks: if too small, livekit
+  # refuses to start and prints the fix.
+  host-preflight:
+    image: livekit/livekit-server:v1.8
+    restart: "no"
+    network_mode: host    # net.core.* 只在宿主网络命名空间可见 / only visible in the host network namespace
+    entrypoint: ["sh"]
+    command:
+      - -c
+      - |
+        MIN=5000000  # 与 99-echo-livekit.conf 一致 / keep equal to 99-echo-livekit.conf
+        fail=0
+        for k in rmem_max wmem_max; do
+          f=/proc/sys/net/core/$$k
+          if [ ! -r "$$f" ]; then
+            echo "host-preflight: FAIL cannot read $${f}"
+            fail=1
+            continue
+          fi
+          v=$$(cat "$$f")
+          if [ "$$v" -ge "$$MIN" ] 2>/dev/null; then
+            echo "host-preflight: OK   net.core.$$k=$$v (>= $$MIN)"
+          else
+            echo "host-preflight: FAIL net.core.$$k=$$v (< $$MIN)"
+            fail=1
+          fi
+        done
+        if [ "$$fail" -ne 0 ]; then
+          echo ""
+          echo "================================================================"
+          echo "Host UDP buffers too small for LiveKit; refusing to start livekit."
+          echo "宿主机 UDP 缓冲未达标，LiveKit 不予启动。"
+          echo "Fix / 修法 (run on the host, in this directory):"
+          echo "  sudo install -m 644 99-echo-livekit.conf /etc/sysctl.d/99-echo-livekit.conf && sudo sysctl --system"
+          echo "Verify / 验证:  sysctl net.core.rmem_max net.core.wmem_max   # both $$MIN"
+          echo "Then / 然后:    docker compose up -d --force-recreate livekit"
+          echo "================================================================"
+          exit 1
+        fi
+        echo "host-preflight: passed / 通过"
+
+  livekit:
+    image: livekit/livekit-server:v1.8
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    depends_on:
+      host-preflight:
+        condition: service_completed_successfully
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      - "7880:7880"          # 信令 WS / signalling  ws://<IP>:7880
+      - "7881:7881"          # RTC over TCP 回退 / TCP fallback
+      - "7882:7882/udp"      # 媒体 UDP / media UDP（必须放行 / must be open）
+
+  backend:
+    # 镜像版本钉应用版本号，与客户端一致；不用 latest，避免服务器与客户端协议错位。
+    # Pin the image to the app version matching your clients; never latest, to keep protocol versions aligned.
+    image: "ghcr.io/loststarjustin/echo-backend:${IMAGE_TAG:?IMAGE_TAG not set - put the Echo app version (e.g. 0.29.6) in .env}"
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgres://echo:${POSTGRES_PASSWORD}@postgres:5432/echo?sslmode=disable"
+      LIVEKIT_API_KEY: "${LIVEKIT_API_KEY}"
+      LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET}"
+      LIVEKIT_WS_URL_PUBLIC: "${LK_SCHEME:-ws}://${SERVER_PUBLIC_IP}:7880"
+      LIVEKIT_HTTP_URL_INTERNAL: "http://livekit:7880"
+      PUBLIC_BASE_URL: "${BACKEND_SCHEME:-http}://${SERVER_PUBLIC_IP}:8080"
+      LISTEN_ADDR: ":8080"
+      LOG_LEVEL: "info"
+      # 每次启动幂等应用账号清单（不存在才建、已存在不改口令）/ idempotent account seeding on every start
+      SEED_USERS_FILE: "/etc/echo/seed-users.yaml"
+    volumes:
+      # seed-users.yaml 必须先放好；缺失时 compose 直接报错而不是悄悄建空目录
+      # seed-users.yaml must exist first; compose fails loudly instead of creating an empty dir
+      - type: bind
+        source: ./seed-users.yaml
+        target: /etc/echo/seed-users.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+    ports:
+      - "8080:8080"          # 后端 API / backend API  http://<IP>:8080
+
+volumes:
+  pgdata:

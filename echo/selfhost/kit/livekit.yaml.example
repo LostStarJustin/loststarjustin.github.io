@@ -1,0 +1,26 @@
+# LiveKit 配置模板。复制为同目录 livekit.yaml，把三处 __占位符__ 替换为与 .env 完全一致的值。
+# LiveKit config template. Copy to livekit.yaml and replace the three __placeholders__
+# with exactly the same values as in .env. livekit.yaml contains secrets: never commit it.
+port: 7880
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  # 云主机：经 STUN 自动发现公网 IP。STUN 不可靠（如中国大陆机房）时改为 false 并加 node_ip: <公网 IP>
+  # Cloud hosts: discover the public IP via STUN. If STUN is unreliable, set false and add node_ip: <public IP>
+  use_external_ip: true
+keys:
+  __LIVEKIT_API_KEY__: __LIVEKIT_API_SECRET__
+webhook:
+  # 漏改这一处会让 LiveKit 回调后端静默失败、房间事件丢失
+  # Forgetting this one makes LiveKit -> backend callbacks fail silently
+  api_key: __LIVEKIT_API_KEY__
+  urls:
+    - http://backend:8080/v1/webhooks/livekit
+room:
+  empty_timeout: 60
+  # 最后一人离开后多久关房；弱网下主持人全量重连约 20–25 s，120 s 覆盖重连窗口
+  # Seconds to keep a room after the last participant leaves; 120 s covers a host's reconnect on a bad network
+  departure_timeout: 120
+  # 关闭「拿 token 加入不存在的房即自动建房」，避免重连到已关闭房间时静默重建空房
+  # Disable auto-create so a reconnect to an already-closed room does not silently recreate it
+  auto_create: false

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Echo · 下载 / Download</title>
+<meta name="description" content="Echo：免费的自托管语音房间与本地录音客户端。Windows / macOS / Android / iOS 下载。">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="./">Echo</a>
+  <nav>
+    <a href="./">下载 / Download</a>
+    <a href="selfhost/">自托管 / Self-host</a>
+    <a href="support/">支持 / Support</a>
+    <a href="privacy/">隐私 / Privacy</a>
+  </nav>
+</header>
+<main class="doc">
+<section class="hero">
+  <h1>Echo</h1>
+  <p>免费的自托管语音房间客户端。多人实时语音，主持人发起录音，录音只存在你自己的设备上。</p>
+  <p>A free, self-hosted voice-room client. Real-time group voice, host-initiated recording, recordings stay on your own device.</p>
+  <p style="margin-top:10px"><span class="ver">当前版本 / Current version: 0.29.6</span></p>
+</section>
+
+<div class="grid">
+  <div class="card">
+    <h3>Windows</h3>
+    <p>Windows 10 / 11，64 位 · 安装向导</p>
+    <a class="btn" href="https://github.com/LostStarJustin/loststarjustin.github.io/releases/download/echo-v0.29.6/Echo-Setup-0.29.6-x64.exe">Echo-Setup-0.29.6-x64.exe</a>
+    <p class="note">安装包未签名。首次运行若出现 SmartScreen 提示，点「更多信息」→「仍要运行」。<br>Unsigned installer: if SmartScreen appears, choose "More info" → "Run anyway".</p>
+  </div>
+  <div class="card">
+    <h3>macOS</h3>
+    <p>macOS 12 及以上 · Apple Silicon（M 系列芯片）</p>
+    <a class="btn" href="https://github.com/LostStarJustin/loststarjustin.github.io/releases/download/echo-v0.29.6/Echo-0.29.6-arm64.dmg">Echo-0.29.6-arm64.dmg</a>
+    <p class="note">已签名并经 Apple 公证，打开 dmg 拖入「应用程序」即可。Intel Mac 暂不支持。<br>Signed and notarized by Apple: open the dmg and drag Echo to Applications. Intel Macs are not supported yet.</p>
+  </div>
+  <div class="card">
+    <h3>Android</h3>
+    <p>Android 10 及以上 · APK 直装</p>
+    <a class="btn" href="https://github.com/LostStarJustin/loststarjustin.github.io/releases/download/echo-v0.29.6/Echo-0.29.6-android.apk">Echo-0.29.6-android.apk</a>
+    <p class="note">系统会询问是否允许安装来自此来源的应用，允许即可。<br>Allow installation from this source when prompted.</p>
+  </div>
+  <div class="card">
+    <h3>iOS</h3>
+    <p>iOS 17 及以上</p>
+    <a class="btn soft" href="#ios">即将上线 / Coming soon</a>
+    <p class="note" id="ios">App Store（非中国大陆地区 Apple ID）与 TestFlight 公开链接（任意地区 Apple ID）审核通过后在此更新。<br>App Store (non-mainland-China Apple ID) and a TestFlight public link (any Apple ID) will appear here after review.</p>
+  </div>
+</div>
+
+<h2>你需要一台服务器 / You need a server</h2>
+<p>Echo 不提供公共服务器。登录页要填的服务器地址来自你或你的组织自己部署的 Echo 服务器，账号由该服务器的管理员创建，app 内没有注册功能。</p>
+<p>Echo offers no public server. The address on the login screen is your own (or your organisation's) Echo server; accounts are created by its administrator and there is no in-app sign-up.</p>
+<p><a class="btn" href="selfhost/">自托管搭建指南 / Self-hosting guide</a></p>
+<p class="note">一台有公网 IP 的 Linux 机器加 Docker，约十分钟。服务器与客户端请保持同一版本。<br>One Linux machine with a public IP and Docker, about ten minutes. Keep server and clients on the same version.</p>
+
+<h2>校验 / Checksums (SHA-256)</h2>
+<table>
+<thead><tr><th>文件 / File</th><th>SHA-256</th></tr></thead>
+<tbody>
+<tr><td>Echo-Setup-0.29.6-x64.exe</td><td><code>发布时填写 / filled at release</code></td></tr>
+<tr><td>Echo-0.29.6-arm64.dmg</td><td><code>发布时填写 / filled at release</code></td></tr>
+<tr><td>Echo-0.29.6-android.apk</td><td><code>发布时填写 / filled at release</code></td></tr>
+</tbody>
+</table>
+<p class="note">macOS / Linux：<code>shasum -a 256 文件名</code>；Windows PowerShell：<code>Get-FileHash 文件名</code>。</p>
+
+<h2>更多 / More</h2>
+<p><a href="support/">技术支持与常见问题 / Support &amp; FAQ</a> · <a href="privacy/">隐私政策 / Privacy policy</a> · <a href="https://github.com/LostStarJustin/loststarjustin.github.io/releases">全部版本 / All releases</a></p>
+</main>
+<footer class="foot">© 2026 Zhixin Wang · Echo is self-hosted software; the developer collects no data.</footer>
+</body>
+</html>
