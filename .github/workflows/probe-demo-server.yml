@@ -1,0 +1,26 @@
+# 从 GitHub Actions（美国机房）探测 Echo 演示服务器可达性，供 App Store 审核前自检（审核员在美国）。
+name: Probe demo server from US
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 待探测 URL
+        default: http://8.166.117.85:8080/v1/healthz
+        required: true
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Runner location
+        run: curl -s https://ipinfo.io/json | tr -d '\n'; echo
+      - name: HTTP probe
+        run: |
+          for i in 1 2 3; do
+            echo "--- attempt $i ---"
+            curl -s -m 15 -o body.txt -w 'http_code=%{http_code} time_total=%{time_total}s remote=%{remote_ip}\n' "${{ inputs.url }}" && cat body.txt && echo
+          done
+      - name: TCP probe (LiveKit 7880 / 7881)
+        run: |
+          for p in 7880 7881; do
+            timeout 10 bash -c "</dev/tcp/8.166.117.85/$p" && echo "tcp 8.166.117.85:$p open" || echo "tcp 8.166.117.85:$p CLOSED/timeout"
+          done
