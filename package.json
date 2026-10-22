@@ -1,1 +1,1 @@
-{ "name": "loststarjustin-site", "private": true, "scripts": { "sync": "tools/sync.sh ../Echo", "build": "node tools/build.cjs" }, "devDependencies": { "markdown-it": "^14.1.0" } }
+{ "name": "loststarjustin-site", "private": true, "scripts": { "sync": "tools/sync.sh", "build": "node tools/build.cjs" }, "devDependencies": { "markdown-it": "^14.1.0" } }

@@ -3,7 +3,7 @@
 # 用法：tools/sync.sh [Echo 仓库路径，默认 ../Echo]；之后 node tools/build.cjs 重新生成 HTML。
 set -euo pipefail
 cd "$(dirname "$0")/.."
-ECHO="${1:-../Echo}"
+ECHO="${1:-..}"   # 站点仓库现位于 Echo 仓库内（owner 2026-10-22），默认取上级目录即 Echo 仓库
 strip_gov() { # 去掉标题后、第一条 --- 之前的治理性引用块（> 开头行）
   awk 'BEGIN{seen=0} /^---/{seen=1} { if(!seen && $0 ~ /^> /) next; print }' "$1"
 }
