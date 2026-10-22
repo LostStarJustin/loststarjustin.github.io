@@ -103,6 +103,8 @@ services:
       PUBLIC_BASE_URL: "${BACKEND_SCHEME:-http}://${SERVER_PUBLIC_IP}:8080"
       LISTEN_ADDR: ":8080"
       LOG_LEVEL: "info"
+      # 邀请码有效期（秒），默认 24h / invite link lifetime in seconds, default 24h
+      INVITE_TTL_SECONDS: "${INVITE_TTL_SECONDS:-86400}"
       # 每次启动幂等应用账号清单（不存在才建、已存在不改口令）/ idempotent account seeding on every start
       SEED_USERS_FILE: "/etc/echo/seed-users.yaml"
     volumes:
