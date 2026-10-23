@@ -1,0 +1,40 @@
+# 把一个已公开可下载的文件（如公司站 R2 上的安装包）镜像到本仓库的 GitHub Release 附件。
+# 用途：本机到 GitHub 上传链路慢时，让 GitHub 的 runner 代为拉取并上传（只用仓库自带 GITHUB_TOKEN）。
+# 触发：gh workflow run mirror-release-asset.yml -f tag=… -f url=… -f name=… -f sha256=…
+name: mirror-release-asset
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag（如 echo-v0.29.6）
+        required: true
+      url:
+        description: 源文件的公开 https 直链
+        required: true
+      name:
+        description: 上传后的附件文件名
+        required: true
+      sha256:
+        description: 源文件 SHA-256（64 位十六进制），下载后校验不符则中止
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download
+        run: curl -fSL --retry 3 -o "${{ inputs.name }}" "${{ inputs.url }}"
+      - name: Verify SHA-256
+        run: echo "${{ inputs.sha256 }}  ${{ inputs.name }}" | sha256sum -c -
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.tag }}" "${{ inputs.name }}" --repo "${{ github.repository }}" --clobber
+      - name: Show assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release view "${{ inputs.tag }}" --repo "${{ github.repository }}" --json assets --jq '.assets[] | "\(.name) \(.size)"'
